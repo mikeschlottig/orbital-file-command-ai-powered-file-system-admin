@@ -79,7 +79,8 @@ function updateWranglerJsonc() {
 function runSetupCommands() {
     const commands = [
     "bun add @tanstack/react-table@^8.20.9",
-    "bun add lucide-react clsx tailwind-merge @tanstack/react-table recharts framer-motion"
+    "bun add lucide-react clsx tailwind-merge @tanstack/react-table recharts framer-motion",
+    "bun add framer-motion"
 ];
     
     if (commands.length === 0) {
