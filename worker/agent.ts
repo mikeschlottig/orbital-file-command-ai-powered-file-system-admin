@@ -1,6 +1,6 @@
 import { Agent } from 'agents';
 import type { Env } from './core-utils';
-import type { ChatState, FileRecord, SystemStats } from './types';
+import type { ChatState, FileRecord, SystemStats, ActionRecord } from './types';
 import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
@@ -13,7 +13,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
     model: 'google-ai-studio/gemini-2.0-flash'
   };
   async onStart(): Promise<void> {
-    // Initialize SQLite Database
     this.initializeDB();
     this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL,
@@ -24,7 +23,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private initializeDB() {
     const sql = this.ctx.storage.sql;
-    // Create Tables
     sql.exec(`
       CREATE TABLE IF NOT EXISTS Files (
         id TEXT PRIMARY KEY,
@@ -54,7 +52,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    // Seed if empty
     const fileCount = sql.exec(`SELECT count(*) as count FROM Files`).one();
     if ((fileCount as any).count === 0) {
       this.seedData();
@@ -81,21 +78,12 @@ export class ChatAgent extends Agent<Env, ChatState> {
     try {
       const url = new URL(request.url);
       const method = request.method;
-      if (method === 'GET' && url.pathname === '/files') {
-        return this.handleGetFiles();
-      }
-      if (method === 'GET' && url.pathname === '/stats') {
-        return this.handleGetStats();
-      }
-      if (method === 'GET' && url.pathname === '/messages') {
-        return this.handleGetMessages();
-      }
-      if (method === 'POST' && url.pathname === '/chat') {
-        return this.handleChatMessage(await request.json());
-      }
-      if (method === 'DELETE' && url.pathname === '/clear') {
-        return this.handleClearMessages();
-      }
+      if (method === 'GET' && url.pathname === '/files') return this.handleGetFiles();
+      if (method === 'GET' && url.pathname === '/stats') return this.handleGetStats();
+      if (method === 'GET' && url.pathname === '/actions') return this.handleGetActions();
+      if (method === 'GET' && url.pathname === '/messages') return this.handleGetMessages();
+      if (method === 'POST' && url.pathname === '/chat') return this.handleChatMessage(await request.json());
+      if (method === 'DELETE' && url.pathname === '/clear') return this.handleClearMessages();
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
     } catch (error) {
       console.error('Request handling error:', error);
@@ -105,10 +93,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private handleGetFiles(): Response {
     const sql = this.ctx.storage.sql;
     const rows = sql.exec(`
-      SELECT f.*, GROUP_CONCAT(t.name) as tags 
-      FROM Files f 
-      LEFT JOIN FileTags ft ON f.id = ft.file_id 
-      LEFT JOIN Tags t ON ft.tag_id = t.id 
+      SELECT f.*, GROUP_CONCAT(t.name) as tags
+      FROM Files f
+      LEFT JOIN FileTags ft ON f.id = ft.file_id
+      LEFT JOIN Tags t ON ft.tag_id = t.id
       GROUP BY f.id
       ORDER BY updated_at DESC
     `).toArray();
@@ -118,11 +106,15 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }));
     return Response.json({ success: true, data: files });
   }
+  private handleGetActions(): Response {
+    const sql = this.ctx.storage.sql;
+    const actions = sql.exec(`SELECT * FROM Actions ORDER BY timestamp DESC LIMIT 50`).toArray();
+    return Response.json({ success: true, data: actions });
+  }
   private handleGetStats(): Response {
     const sql = this.ctx.storage.sql;
     const totals = sql.exec(`SELECT count(*) as count, sum(size) as size FROM Files`).one() as any;
     const distribution = sql.exec(`SELECT type as name, count(*) as value FROM Files GROUP BY type`).toArray();
-    // Mock activity for sparklines
     const activity = Array.from({ length: 7 }, (_, i) => ({
       time: `${i + 1}d ago`,
       count: Math.floor(Math.random() * 10)
