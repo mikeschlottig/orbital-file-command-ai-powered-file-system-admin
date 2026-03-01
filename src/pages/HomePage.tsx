@@ -1,138 +1,94 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React, { useEffect, useState, useCallback } from 'react';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { SystemHealth } from '@/components/dashboard/SystemHealth';
+import { FileExplorer } from '@/components/dashboard/FileExplorer';
+import { CommandConsole } from '@/components/dashboard/CommandConsole';
+import { chatService } from '@/lib/chat';
+import { orbitalApi } from '@/lib/api';
+import { FileRecord, SystemStats } from '../../worker/types';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { Toaster, toast } from '@/components/ui/sonner';
+import { Info } from 'lucide-react';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
+  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [files, setFiles] = useState<FileRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const sessionId = chatService.getSessionId();
+  const refreshData = useCallback(async () => {
+    try {
+      const [statsRes, filesRes] = await Promise.all([
+        orbitalApi.fetchStats(sessionId),
+        orbitalApi.fetchFiles(sessionId)
+      ]);
+      if (statsRes.success && statsRes.data) setStats(statsRes.data);
+      if (filesRes.success && filesRes.data) setFiles(filesRes.data);
+    } catch (err) {
+      console.error("Dashboard refresh failed", err);
+      toast.error("Failed to sync system data.");
+    } finally {
+      setLoading(false);
     }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
+  }, [sessionId]);
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-      <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
+    <AppLayout className="bg-slate-950 overflow-hidden">
+      <div className="flex flex-col h-full p-4 md:p-6 space-y-6">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <span className="w-2 h-6 bg-blue-600 rounded-full" />
+              Orbital File Command
+            </h1>
+            <p className="text-slate-500 text-sm">Autonomous File System Management Interface</p>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-        </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
+          <div className="flex items-center gap-4 bg-slate-900/50 p-2 px-4 rounded-lg border border-slate-800">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Instance Status</span>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs text-slate-300 font-mono">STABLE_ACTIVE</span>
+              </div>
+            </div>
+          </div>
+        </header>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-slate-500 animate-pulse font-mono">SYNCHRONIZING_CORE_INDEX...</div>
           </div>
         ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-              </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
-            </div>
-          </>
+          <div className="flex-1 min-h-0">
+            <ResizablePanelGroup direction="vertical" className="gap-6">
+              <ResizablePanel defaultSize={40} minSize={30}>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+                  <div className="lg:col-span-7 h-full">
+                    <CommandConsole onCommandCompleted={refreshData} />
+                  </div>
+                  <div className="lg:col-span-5 h-full overflow-y-auto">
+                    {stats && <SystemHealth stats={stats} />}
+                  </div>
+                </div>
+              </ResizablePanel>
+              <ResizableHandle withHandle className="bg-transparent" />
+              <ResizablePanel defaultSize={60} minSize={30}>
+                <FileExplorer files={files} />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
         )}
+        <footer className="flex items-center justify-between py-2 border-t border-slate-900 text-[10px] text-slate-600 font-mono">
+          <div className="flex items-center gap-4">
+            <span>SQ_ENGINE: v3.41.2</span>
+            <span>OS_BRIDGE: CLOUDFLARE_DO</span>
+          </div>
+          <div className="flex items-center gap-1 text-slate-500">
+            <Info className="w-3 h-3" />
+            AI requests are subject to system-wide limits.
+          </div>
+        </footer>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
-      </footer>
-
-      <Toaster richColors closeButton />
-    </div>
-  )
+      <Toaster theme="dark" position="bottom-right" />
+    </AppLayout>
+  );
 }

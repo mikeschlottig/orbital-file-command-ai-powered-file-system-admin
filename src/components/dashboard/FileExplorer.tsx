@@ -1,168 +1,83 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { File, FolderOpen, Search, Filter, ArrowRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { File, FolderOpen, Search, Filter } from 'lucide-react';
 import { FileRecord } from '../../../worker/types';
-import { FilePreview } from './FilePreview';
-import { cn } from '@/lib/utils';
-interface FileExplorerProps {
-  files: FileRecord[];
-  selectedIds: Set<string>;
-  onSelectionChange: (ids: Set<string>) => void;
-}
-const FileRow = React.memo(({ 
-  file, 
-  isSelected, 
-  onToggle, 
-  onPreview 
-}: { 
-  file: FileRecord, 
-  isSelected: boolean, 
-  onToggle: (id: string, e: React.MouseEvent) => void,
-  onPreview: (file: FileRecord) => void
-}) => (
-  <motion.tr
-    layout
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    className={cn(
-      "group border-slate-900 cursor-pointer transition-all border-b",
-      isSelected ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/20" : "hover:bg-slate-900/50"
-    )}
-    onClick={() => onPreview(file)}
-  >
-    <TableCell className="px-4">
-      <Checkbox
-        checked={isSelected}
-        onCheckedChange={() => {}} // Controlled via onClick on div for better hit area
-        onClick={(e) => onToggle(file.id, e)}
-        className="border-slate-800 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
-      />
-    </TableCell>
-    <TableCell>
-      <div className="flex items-center gap-2.5">
-        <div className={cn(
-          "p-1.5 rounded-lg transition-colors",
-          isSelected ? "bg-blue-500/20" : "bg-blue-500/5 group-hover:bg-blue-500/20"
-        )}>
-          <File className="w-3.5 h-3.5 text-blue-500" />
-        </div>
-        <span className="font-mono text-xs font-semibold text-slate-200">{file.name}</span>
-      </div>
-    </TableCell>
-    <TableCell>
-      <div className="flex items-center gap-1.5 text-slate-500 font-mono text-[10px]">
-        <FolderOpen className="w-3 h-3 opacity-50" />
-        {file.path}
-      </div>
-    </TableCell>
-    <TableCell className="text-right font-mono text-xs text-slate-400 tabular-nums">
-      {(file.size / 1024).toFixed(0)} KB
-    </TableCell>
-    <TableCell>
-      <div className="flex flex-wrap justify-center gap-1">
-        {file.tags?.length ? file.tags.map(t => (
-          <Badge key={t} variant="secondary" className="text-[9px] px-1.5 py-0 bg-slate-900 border-slate-800 text-slate-500">
-            {t}
-          </Badge>
-        )) : <span className="text-[10px] text-slate-800 italic">none</span>}
-      </div>
-    </TableCell>
-    <TableCell className="text-right pr-4">
-      <div className="flex items-center justify-end gap-2">
-        <span className="text-[10px] text-slate-600 font-mono">
-          {new Date(file.updated_at).toLocaleDateString()}
-        </span>
-        <ArrowRight className="w-3 h-3 text-slate-800 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-      </div>
-    </TableCell>
-  </motion.tr>
-));
-FileRow.displayName = 'FileRow';
-export function FileExplorer({ files, selectedIds, onSelectionChange }: FileExplorerProps) {
+export function FileExplorer({ files }: { files: FileRecord[] }) {
   const [search, setSearch] = useState('');
-  const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
-  const filtered = useMemo(() => files.filter(f =>
-    f.name.toLowerCase().includes(search.toLowerCase()) ||
+  const filtered = files.filter(f => 
+    f.name.toLowerCase().includes(search.toLowerCase()) || 
     f.path.toLowerCase().includes(search.toLowerCase())
-  ), [files, search]);
-  const toggleAll = useCallback((checked: boolean) => {
-    if (checked) {
-      onSelectionChange(new Set(filtered.map(f => f.id)));
-    } else {
-      onSelectionChange(new Set());
-    }
-  }, [filtered, onSelectionChange]);
-  const toggleOne = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onSelectionChange(next);
-  }, [selectedIds, onSelectionChange]);
+  );
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
-          <Input
-            placeholder="Search core index (e.g. *.pdf, /documents)..."
-            className="pl-9 bg-slate-950 border-slate-800 text-slate-200 focus-visible:ring-blue-500/20 focus-visible:border-blue-500/50 transition-all font-mono text-xs h-9"
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-500" />
+          <Input 
+            placeholder="Filter by name or path..." 
+            className="pl-8 bg-slate-900/50 border-slate-800 text-slate-200"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Badge variant="outline" className="h-9 px-4 border-slate-800 bg-slate-900/50 text-slate-400 flex items-center gap-2 uppercase tracking-tighter text-[10px] font-bold">
-          <Filter className="w-3.5 h-3.5" /> Filter_State: Global
+        <Badge variant="outline" className="h-9 border-slate-800 text-slate-400">
+          <Filter className="w-3 h-3 mr-1" /> All Files
         </Badge>
       </div>
-      <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950/80 backdrop-blur-sm shadow-xl">
+      <div className="rounded-lg border border-slate-800 overflow-hidden bg-slate-900/50">
         <Table>
-          <TableHeader className="bg-slate-900/50">
-            <TableRow className="hover:bg-transparent border-slate-800/60">
-              <TableHead className="w-12 px-4">
-                <Checkbox
-                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                  onCheckedChange={(c) => toggleAll(!!c)}
-                  className="border-slate-700 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                />
-              </TableHead>
-              <TableHead className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider">Filename</TableHead>
-              <TableHead className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider">Storage Path</TableHead>
-              <TableHead className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider text-right">Data Size</TableHead>
-              <TableHead className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider text-center">Tags</TableHead>
-              <TableHead className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider text-right pr-4">Updated</TableHead>
+          <TableHeader className="bg-slate-900">
+            <TableRow className="hover:bg-transparent border-slate-800">
+              <TableHead className="text-slate-400 w-[300px]">Filename</TableHead>
+              <TableHead className="text-slate-400">Path</TableHead>
+              <TableHead className="text-slate-400">Size</TableHead>
+              <TableHead className="text-slate-400">Tags</TableHead>
+              <TableHead className="text-slate-400 text-right">Modified</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <AnimatePresence mode="popLayout">
-              {filtered.length > 0 ? filtered.map((file) => (
-                <FileRow 
-                  key={file.id} 
-                  file={file} 
-                  isSelected={selectedIds.has(file.id)}
-                  onToggle={toggleOne}
-                  onPreview={setPreviewFile}
-                />
-              )) : (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-40 text-center">
-                    <div className="flex flex-col items-center justify-center space-y-2 opacity-30">
-                      <Search className="w-8 h-8" />
-                      <p className="text-xs font-mono uppercase tracking-widest">ZERO_MATCHES_RETURNED</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </AnimatePresence>
+            {filtered.length > 0 ? filtered.map((file) => (
+              <TableRow key={file.id} className="hover:bg-slate-800/50 border-slate-800">
+                <TableCell className="font-medium text-slate-200">
+                  <div className="flex items-center gap-2">
+                    <File className="w-4 h-4 text-blue-400" />
+                    {file.name}
+                  </div>
+                </TableCell>
+                <TableCell className="text-slate-400 font-mono text-xs">
+                  <div className="flex items-center gap-1">
+                    <FolderOpen className="w-3 h-3" />
+                    {file.path}
+                  </div>
+                </TableCell>
+                <TableCell className="text-slate-300">
+                  {(file.size / 1024).toFixed(0)} KB
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {file.tags?.map(t => (
+                      <Badge key={t} variant="secondary" className="text-[10px] py-0 bg-blue-500/10 text-blue-400 border-blue-500/20">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right text-slate-500 text-xs">
+                  {new Date(file.updated_at).toLocaleDateString()}
+                </TableCell>
+              </TableRow>
+            )) : (
+              <TableRow>
+                <TableCell colSpan={5} className="h-32 text-center text-slate-500">
+                  No files found in index.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
-      <FilePreview file={previewFile} isOpen={!!previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }
