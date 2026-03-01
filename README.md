@@ -1,6 +1,6 @@
 # Cloudflare Agents AI Chat Template
 
-[![Deploy to Cloudflare][cloudflarebutton]]
+[![Deploy to Cloudflare][![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/orbital-file-command-ai-powered-file-system-admin)]
 
 A production-ready AI agent chatbot template powered by **Cloudflare Agents SDK**. Features intelligent tool calling via **Model Context Protocol (MCP)**, multi-model support, persistent conversations with Durable Objects, and a modern React frontend.
 
@@ -99,7 +99,7 @@ Deploy to Cloudflare Workers in one command:
 bun run deploy
 ```
 
-[![Deploy to Cloudflare][cloudflarebutton]]
+[![Deploy to Cloudflare][![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mikeschlottig/orbital-file-command-ai-powered-file-system-admin)]
 
 ### Prerequisites
 1. **Cloudflare Account** - Free tier supported
