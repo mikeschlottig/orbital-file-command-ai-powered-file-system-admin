@@ -1,16 +1,4 @@
 export interface ApiResponse<T = unknown> { success: boolean; data?: T; error?: string; }
-export interface WeatherResult {
-  location: string;
-  temperature: number;
-  condition: string;
-  humidity: number;
-}
-export interface MCPResult {
-  content: string;
-}
-export interface ErrorResult {
-  error: string;
-}
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -37,16 +25,6 @@ export interface SessionInfo {
   createdAt: number;
   lastActive: number;
 }
-export interface Tool {
-  name: string;
-  description: string;
-  parameters: {
-    type: string;
-    properties: Record<string, unknown>;
-    required: string[];
-  };
-}
-// Phase 1: SQLite Entity Types
 export interface FileRecord {
   id: string;
   name: string;
@@ -57,20 +35,27 @@ export interface FileRecord {
   updated_at: string;
   tags?: string[];
 }
-export interface TagRecord {
-  id: string;
-  name: string;
-}
 export interface ActionRecord {
   id: string;
   type: string;
   description: string;
   timestamp: string;
   status: 'success' | 'failure';
+  batch_id?: string;
 }
 export interface SystemStats {
   totalFiles: number;
   totalSize: number;
   typeDistribution: Array<{ name: string; value: number }>;
   recentActivity: Array<{ time: string; count: number }>;
+}
+export interface GlobalStats {
+  totalSessions: number;
+  totalRecordsEstimate: number;
+  systemLoad: number;
+}
+export interface BatchActionRequest {
+  fileIds: string[];
+  action: 'MOVE' | 'TAG';
+  value: string;
 }

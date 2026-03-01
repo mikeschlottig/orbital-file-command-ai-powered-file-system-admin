@@ -1,8 +1,9 @@
-import type { Message, ChatState, ToolCall, WeatherResult, MCPResult, ErrorResult, SessionInfo } from '../../worker/types';
+import type { Message, ChatState, SessionInfo } from '../../worker/types';
 export interface ChatResponse {
   success: boolean;
   data?: ChatState;
   error?: string;
+  detail?: any;
 }
 export const MODELS = [
   { id: 'google-ai-studio/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
@@ -26,20 +27,34 @@ class ChatService {
       localStorage.setItem('orbital_session_id', this.sessionId);
     }
   }
+  private async validateSession() {
+    if (!this.sessionId || this.sessionId.length < 5) {
+      throw new Error(`Invalid Session ID: ${this.sessionId}`);
+    }
+  }
+  async ping(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/ping`);
+      return response.ok;
+    } catch (e) {
+      return false;
+    }
+  }
   async sendMessage(
     message: string,
     model?: string,
     onChunk?: (chunk: string) => void
   ): Promise<ChatResponse> {
     try {
+      await this.validateSession();
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, model, stream: !!onChunk }),
       });
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText || 'Unknown error'}`);
+        const text = await response.text();
+        throw new Error(`Network response was not ok: ${response.status} ${text}`);
       }
       if (onChunk && response.body) {
         const reader = response.body.getReader();
@@ -57,26 +72,40 @@ class ChatService {
         return { success: true };
       }
       return await response.json();
-    } catch (error) {
-      console.error('[ChatService] sendMessage failure:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Failed to send message' };
+    } catch (error: any) {
+      console.error('[ChatService] sendMessage failure:', {
+        message: error.message,
+        stack: error.stack,
+        sessionId: this.sessionId
+      });
+      return { success: false, error: error.message || 'Failed to send message' };
     }
   }
   async getMessages(): Promise<ChatResponse> {
     try {
+      await this.validateSession();
       const response = await fetch(`${this.baseUrl}/messages`);
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText || 'Unknown error'}`);
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text || 'Unknown Error'}`);
       }
-      return await response.json();
-    } catch (error) {
-      console.error('[ChatService] getMessages failure:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Failed to load messages' };
+      const data = await response.json();
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid JSON response from agent');
+      }
+      return data;
+    } catch (error: any) {
+      console.error('[ChatService] getMessages failure:', {
+        message: error.message,
+        stack: error.stack,
+        sessionId: this.sessionId
+      });
+      return { success: false, error: error.message || 'Failed to load messages' };
     }
   }
   async clearMessages(): Promise<ChatResponse> {
     try {
+      await this.validateSession();
       const response = await fetch(`${this.baseUrl}/clear`, { method: 'DELETE' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
@@ -95,24 +124,6 @@ class ChatService {
   switchSession(sessionId: string): void {
     this.sessionId = sessionId;
     this.updateBaseUrl();
-  }
-  async listSessions(): Promise<{ success: boolean; data?: SessionInfo[]; error?: string }> {
-    try {
-      const response = await fetch('/api/sessions');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to list sessions' };
-    }
-  }
-  async deleteSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: 'Failed to delete session' };
-    }
   }
 }
 export const chatService = new ChatService();

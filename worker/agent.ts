@@ -1,6 +1,6 @@
 import { Agent } from 'agents';
 import type { Env } from './core-utils';
-import type { ChatState, FileRecord, SystemStats, ActionRecord } from './types';
+import type { ChatState, FileRecord, SystemStats, ActionRecord, BatchActionRequest } from './types';
 import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
@@ -8,7 +8,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
     messages: [],
-    sessionId: crypto.randomUUID(),
+    sessionId: '',
     isProcessing: false,
     model: 'google-ai-studio/gemini-2.0-flash'
   };
@@ -49,6 +49,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
         type TEXT NOT NULL,
         description TEXT NOT NULL,
         status TEXT NOT NULL,
+        batch_id TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -78,15 +79,17 @@ export class ChatAgent extends Agent<Env, ChatState> {
     try {
       const url = new URL(request.url);
       const method = request.method;
+      if (method === 'GET' && url.pathname === '/ping') return Response.json({ success: true, status: 'online' });
       if (method === 'GET' && url.pathname === '/files') return this.handleGetFiles();
       if (method === 'GET' && url.pathname === '/stats') return this.handleGetStats();
       if (method === 'GET' && url.pathname === '/actions') return this.handleGetActions();
       if (method === 'GET' && url.pathname === '/messages') return this.handleGetMessages();
       if (method === 'POST' && url.pathname === '/chat') return this.handleChatMessage(await request.json());
+      if (method === 'POST' && url.pathname === '/batch') return this.handleBatchAction(await request.json());
       if (method === 'DELETE' && url.pathname === '/clear') return this.handleClearMessages();
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
     } catch (error) {
-      console.error('Request handling error:', error);
+      console.error('Agent request handling error:', error);
       return Response.json({ success: false, error: API_RESPONSES.INTERNAL_ERROR }, { status: 500 });
     }
   }
@@ -115,20 +118,46 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const sql = this.ctx.storage.sql;
     const totals = sql.exec(`SELECT count(*) as count, sum(size) as size FROM Files`).one() as any;
     const distribution = sql.exec(`SELECT type as name, count(*) as value FROM Files GROUP BY type`).toArray();
-    const activity = Array.from({ length: 7 }, (_, i) => ({
-      time: `${i + 1}d ago`,
-      count: Math.floor(Math.random() * 10)
-    }));
     const stats: SystemStats = {
       totalFiles: totals.count || 0,
       totalSize: totals.size || 0,
       typeDistribution: distribution as any,
-      recentActivity: activity
+      recentActivity: Array.from({ length: 7 }, (_, i) => ({ time: `${i + 1}d ago`, count: Math.floor(Math.random() * 5) }))
     };
     return Response.json({ success: true, data: stats });
   }
   private handleGetMessages(): Response {
-    return Response.json({ success: true, data: this.state });
+    // Ensure state has essential fields before returning
+    const safeState = {
+      ...this.state,
+      messages: this.state.messages || [],
+      sessionId: this.state.sessionId || 'anonymous'
+    };
+    return Response.json({ success: true, data: safeState });
+  }
+  private async handleBatchAction(body: BatchActionRequest): Promise<Response> {
+    const { fileIds, action, value } = body;
+    const sql = this.ctx.storage.sql;
+    const batchId = crypto.randomUUID();
+    try {
+      if (action === 'MOVE') {
+        const placeholders = fileIds.map(() => '?').join(',');
+        sql.exec(`UPDATE Files SET path = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`, value, ...fileIds);
+        sql.exec(`INSERT INTO Actions (id, type, description, status, batch_id) VALUES (?, 'MOVE', ?, 'success', ?)`,
+          crypto.randomUUID(), `Batch moved ${fileIds.length} files to ${value}`, batchId);
+      } else if (action === 'TAG') {
+        sql.exec(`INSERT OR IGNORE INTO Tags (id, name) VALUES (?, ?)`, crypto.randomUUID(), value);
+        const tag = sql.exec(`SELECT id FROM Tags WHERE name = ?`, value).one() as any;
+        for (const fid of fileIds) {
+          sql.exec(`INSERT OR IGNORE INTO FileTags (file_id, tag_id) VALUES (?, ?)`, fid, tag.id);
+        }
+        sql.exec(`INSERT INTO Actions (id, type, description, status, batch_id) VALUES (?, 'TAG', ?, 'success', ?)`,
+          crypto.randomUUID(), `Batch tagged ${fileIds.length} files with '${value}'`, batchId);
+      }
+      return Response.json({ success: true, batchId });
+    } catch (e: any) {
+      return Response.json({ success: false, error: e.message }, { status: 500 });
+    }
   }
   private async handleChatMessage(body: { message: string; model?: string; stream?: boolean }): Promise<Response> {
     const { message, model, stream } = body;
@@ -142,7 +171,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const userMessage = createMessage('user', message.trim());
     this.setState({
       ...this.state,
-      messages: [...this.state.messages, userMessage],
+      messages: [...(this.state.messages || []), userMessage],
       isProcessing: true
     });
     try {
@@ -173,7 +202,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
               streamingMessage: ''
             });
           } catch (e) {
-            writer.write(encoder.encode('Streaming error.'));
+            writer.write(encoder.encode('Neural link interrupted during stream.'));
           } finally {
             writer.close();
           }
@@ -195,6 +224,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private handleClearMessages(): Response {
     this.setState({ ...this.state, messages: [] });
-    return Response.json({ success: true, data: this.state });
+    return Response.json({ success: true });
   }
 }

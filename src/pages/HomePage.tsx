@@ -3,17 +3,19 @@ import { SystemHealth } from '@/components/dashboard/SystemHealth';
 import { FileExplorer } from '@/components/dashboard/FileExplorer';
 import { CommandConsole } from '@/components/dashboard/CommandConsole';
 import { ActionLog } from '@/components/dashboard/ActionLog';
+import { BatchToolbar } from '@/components/dashboard/BatchToolbar';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { chatService } from '@/lib/chat';
 import { orbitalApi } from '@/lib/api';
 import { FileRecord, SystemStats, ActionRecord } from '../../worker/types';
 import { Toaster, toast } from 'sonner';
-import { Terminal } from 'lucide-react';
+import { Terminal, Shield } from 'lucide-react';
 export function HomePage() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [actions, setActions] = useState<ActionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const sessionId = chatService.getSessionId();
   const refreshData = useCallback(async () => {
     try {
@@ -32,13 +34,25 @@ export function HomePage() {
       setLoading(false);
     }
   }, [sessionId]);
+  const initSession = useCallback(async () => {
+    setLoading(true);
+    // Ping to ensure DO is ready
+    const isOnline = await chatService.ping();
+    if (!isOnline) {
+      console.warn("Node cold start detected. Waiting for neural link...");
+    }
+    await orbitalApi.createSession(`Mission ${sessionId.slice(0, 4)}`, sessionId);
+    await refreshData();
+  }, [sessionId, refreshData]);
   useEffect(() => {
+    initSession();
+  }, [initSession]);
+  const handleActionComplete = () => {
+    setSelectedIds(new Set());
     refreshData();
-    // Register the current session on the AppController if it doesn't exist
-    orbitalApi.createSession(`Mission ${sessionId.slice(0, 4)}`, sessionId);
-  }, [refreshData, sessionId]);
+  };
   return (
-    <AppLayout container className="bg-slate-950">
+    <AppLayout container className="bg-slate-950 pb-32">
       <div className="flex flex-col min-h-screen gap-6">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-6">
           <div className="space-y-1">
@@ -54,10 +68,10 @@ export function HomePage() {
               <span className="text-xs text-blue-400 font-mono truncate max-w-[120px]">{sessionId}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Status</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Access</span>
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                <span className="text-xs text-slate-300 font-mono uppercase tracking-tighter font-bold">Optimal</span>
+                <Shield className="w-3 h-3 text-emerald-500" />
+                <span className="text-xs text-slate-300 font-mono uppercase tracking-tighter font-bold">Encrypted</span>
               </div>
             </div>
           </div>
@@ -89,12 +103,22 @@ export function HomePage() {
                   </h2>
                   <span className="text-[10px] text-slate-700 font-mono font-bold">{files.length} ENTRIES_LOADED</span>
                 </div>
-                <FileExplorer files={files} />
+                <FileExplorer 
+                  files={files} 
+                  selectedIds={selectedIds} 
+                  onSelectionChange={setSelectedIds} 
+                />
               </div>
             </div>
           </div>
         )}
       </div>
+      <BatchToolbar 
+        selectedCount={selectedIds.size} 
+        selectedIds={Array.from(selectedIds)} 
+        onActionComplete={handleActionComplete}
+        onClear={() => setSelectedIds(new Set())}
+      />
       <Toaster position="bottom-right" richColors />
     </AppLayout>
   );
