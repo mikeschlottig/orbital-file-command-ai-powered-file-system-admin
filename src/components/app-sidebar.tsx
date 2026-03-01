@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Plus, Terminal, History, Trash2, ShieldAlert, Zap, Globe, Power } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   Sidebar,
   SidebarContent,
@@ -134,10 +135,10 @@ export function AppSidebar(): JSX.Element {
                 <span className="text-blue-500">{globalStats?.totalSessions || 0}</span>
               </div>
               <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(100, (globalStats?.totalSessions || 0) * 10)}%` }}
-                  className="bg-blue-600 h-full" 
+                  className="bg-blue-600 h-full"
                 />
               </div>
             </div>
@@ -147,10 +148,10 @@ export function AppSidebar(): JSX.Element {
                 <span className="text-emerald-500">{globalStats?.totalRecordsEstimate || 0} RECS</span>
               </div>
               <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(100, (globalStats?.totalRecordsEstimate || 0) / 10)}%` }}
-                  className="bg-emerald-600 h-full" 
+                  className="bg-emerald-600 h-full"
                 />
               </div>
             </div>

@@ -8,8 +8,8 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { chatService } from '@/lib/chat';
 import { orbitalApi } from '@/lib/api';
 import { FileRecord, SystemStats, ActionRecord } from '../../worker/types';
-import { Toaster, toast } from 'sonner';
-import { Terminal, Shield, RefreshCw, Cpu, Activity } from 'lucide-react';
+import { Toaster } from 'sonner';
+import { Terminal, RefreshCw, Cpu, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -54,10 +54,12 @@ export function HomePage() {
   }, [sessionId, refreshData]);
   useEffect(() => {
     initSession();
-    // Listen for custom events from nested components
+    // Global synchronization events
     const handleRefresh = () => refreshData(true);
     window.addEventListener('refresh-dashboard', handleRefresh);
-    return () => window.removeEventListener('refresh-dashboard', handleRefresh);
+    return () => {
+      window.removeEventListener('refresh-dashboard', handleRefresh);
+    };
   }, [initSession, refreshData]);
   const handleActionComplete = useCallback(() => {
     setSelectedIds(new Set());
@@ -81,8 +83,7 @@ export function HomePage() {
   return (
     <AppLayout container className="bg-slate-950 pb-32">
       <div className="flex flex-col min-h-screen gap-6 relative">
-        {/* Subtle background pulse when refreshing */}
-        <motion.div 
+        <motion.div
           animate={{ opacity: isRefreshing ? 0.3 : 0 }}
           className="fixed inset-0 bg-blue-500/5 pointer-events-none z-0"
         />
@@ -115,12 +116,12 @@ export function HomePage() {
           <div className="flex-1 flex flex-col items-center justify-center space-y-4 min-h-[400px]">
             <div className="relative">
               <Terminal className="w-16 h-16 text-blue-500/10 animate-pulse" />
-              <Cpu className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-blue-600 animate-spin duration-3000" />
+              <Cpu className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-blue-600 animate-spin duration-[3000ms]" />
             </div>
             <div className="text-slate-600 animate-pulse font-mono text-[10px] tracking-[0.4em] uppercase font-black">Initiating_Link_Sequence...</div>
           </div>
         ) : (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex-1 flex flex-col gap-6 relative z-10"
