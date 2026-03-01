@@ -1,12 +1,14 @@
 import { Agent } from 'agents';
+import { Hono } from 'hono';
 import type { Env } from './core-utils';
 import type { ChatState, SystemStats, BatchActionRequest } from './types';
 import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
-import { createMessage, createStreamResponse, createEncoder } from './utils';
+import { createMessage } from './utils';
 import { getAppController } from './core-utils';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
+  private app: Hono<{ Bindings: Env }> = new Hono();
   initialState: ChatState = {
     messages: [],
     sessionId: '',
@@ -15,6 +17,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
   };
   async onStart(): Promise<void> {
     this.initializeDB();
+    this.setupRouter();
     this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL,
       this.env.CF_AI_API_KEY,
@@ -22,6 +25,23 @@ export class ChatAgent extends Agent<Env, ChatState> {
       this.ctx.storage.sql
     );
     await this.reportStatsToController();
+  }
+  private setupRouter() {
+    this.app.get('/ping', (c) => c.json({ success: true, status: 'online' }));
+    this.app.get('/files', () => this.handleGetFiles());
+    this.app.get('/stats', () => this.handleGetStats());
+    this.app.get('/actions', () => this.handleGetActions());
+    this.app.get('/messages', () => this.handleGetMessages());
+    this.app.post('/chat', async (c) => this.handleChatMessage(await c.req.json()));
+    this.app.post('/batch', async (c) => this.handleBatchAction(await c.req.json()));
+    this.app.delete('/clear', () => this.handleClearMessages());
+    this.app.delete('/files/:id', (c) => this.handleDeleteFile(c.req.param('id')));
+    this.app.delete('/purge', () => this.handlePurgeDatabase());
+    this.app.onError((err, c) => {
+      console.error('Agent Internal Router Error:', err);
+      return c.json({ success: false, error: API_RESPONSES.INTERNAL_ERROR }, 500);
+    });
+    this.app.notFound((c) => c.json({ success: false, error: API_RESPONSES.NOT_FOUND }, 404));
   }
   private initializeDB() {
     const sql = this.ctx.storage.sql;
@@ -74,38 +94,21 @@ export class ChatAgent extends Agent<Env, ChatState> {
     for (const f of files) {
       sql.exec(`INSERT INTO Files (id, name, path, size, type) VALUES (?, ?, ?, ?, ?)`, ...f);
     }
-    sql.exec(`INSERT INTO Tags (id, name) VALUES ('t1', 'Important'), ('t2', 'Work'), ('t3', 'Private')`);
-    sql.exec(`INSERT INTO FileTags (file_id, tag_id) VALUES ('f1', 't1'), ('f1', 't2'), ('f2', 't2')`);
+    sql.exec(`INSERT OR IGNORE INTO Tags (id, name) VALUES ('t1', 'Important'), ('t2', 'Work'), ('t3', 'Private')`);
+    sql.exec(`INSERT OR IGNORE INTO FileTags (file_id, tag_id) VALUES ('f1', 't1'), ('f1', 't2'), ('f2', 't2')`);
   }
   private async reportStatsToController() {
-    const sql = this.ctx.storage.sql;
-    const stats = sql.exec(`SELECT count(*) as count, sum(size) as size FROM Files`).one() as any;
-    const controller = getAppController(this.env);
-    await controller.reportStats(this.ctx.id.toString(), stats.count || 0, stats.size || 0);
+    try {
+      const sql = this.ctx.storage.sql;
+      const stats = sql.exec(`SELECT count(*) as count, sum(size) as size FROM Files`).one() as any;
+      const controller = getAppController(this.env);
+      await controller.reportStats(this.ctx.id.toString(), stats.count || 0, stats.size || 0);
+    } catch (e) {
+      console.warn('Telemetry report failed:', e);
+    }
   }
   async onRequest(request: Request): Promise<Response> {
-    try {
-      const url = new URL(request.url);
-      const path = url.pathname === "" ? "/" : url.pathname;
-      const method = request.method;
-      if (method === 'GET' && path === '/ping') return Response.json({ success: true, status: 'online' });
-      if (method === 'GET' && path === '/files') return this.handleGetFiles();
-      if (method === 'GET' && path === '/stats') return this.handleGetStats();
-      if (method === 'GET' && path === '/actions') return this.handleGetActions();
-      if (method === 'GET' && path === '/messages') return this.handleGetMessages();
-      if (method === 'POST' && path === '/chat') return this.handleChatMessage(await request.json());
-      if (method === 'POST' && path === '/batch') return this.handleBatchAction(await request.json());
-      if (method === 'DELETE' && path === '/clear') return this.handleClearMessages();
-      if (method === 'DELETE' && path.startsWith('/files/')) {
-        const id = path.split('/').pop();
-        return this.handleDeleteFile(id || '');
-      }
-      if (method === 'DELETE' && path === '/purge') return this.handlePurgeDatabase();
-      return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
-    } catch (error) {
-      console.error('Agent request handling error:', error);
-      return Response.json({ success: false, error: API_RESPONSES.INTERNAL_ERROR }, { status: 500 });
-    }
+    return this.app.fetch(request);
   }
   private handleGetFiles(): Response {
     const sql = this.ctx.storage.sql;
@@ -149,6 +152,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     return Response.json({ success: true, data: safeState });
   }
   private async handleDeleteFile(id: string): Promise<Response> {
+    if (!id) return Response.json({ success: false, error: 'Identifier required' }, 400);
     const sql = this.ctx.storage.sql;
     sql.exec(`DELETE FROM Files WHERE id = ?`, id);
     sql.exec(`INSERT INTO Actions (id, type, description, status) VALUES (?, 'PURGE', ?, 'success')`,
@@ -167,6 +171,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private async handleBatchAction(body: BatchActionRequest): Promise<Response> {
     const { fileIds, action, value } = body;
+    if (!fileIds?.length || !action || !value) return Response.json({ success: false, error: 'Invalid batch parameters' }, 400);
     const sql = this.ctx.storage.sql;
     const batchId = crypto.randomUUID();
     try {
@@ -191,7 +196,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
   }
   private async handleChatMessage(body: { message: string; model?: string; stream?: boolean }): Promise<Response> {
-    const { message, model, stream } = body;
+    const { message, model } = body;
     if (!message?.trim()) {
       return Response.json({ success: false, error: API_RESPONSES.MISSING_MESSAGE }, { status: 400 });
     }
@@ -211,7 +216,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
       const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
       this.setState({
         ...this.state,
-        messages: [...this.state.messages, assistantMessage],
+        messages: [...(this.state.messages || []), assistantMessage],
         isProcessing: false
       });
       await this.reportStatsToController();
