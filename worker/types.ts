@@ -1,4 +1,14 @@
-export interface ApiResponse<T = unknown> { success: boolean; data?: T; error?: string; }
+export interface ApiResponse<T = unknown> { 
+  success: boolean; 
+  data?: T; 
+  error?: string; 
+  detail?: any;
+}
+export interface ErrorResult {
+  error: string;
+  code?: string;
+  detail?: any;
+}
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;

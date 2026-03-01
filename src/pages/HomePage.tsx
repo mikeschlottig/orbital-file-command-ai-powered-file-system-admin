@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { SystemHealth } from '@/components/dashboard/SystemHealth';
 import { FileExplorer } from '@/components/dashboard/FileExplorer';
 import { CommandConsole } from '@/components/dashboard/CommandConsole';
@@ -9,13 +9,15 @@ import { chatService } from '@/lib/chat';
 import { orbitalApi } from '@/lib/api';
 import { FileRecord, SystemStats, ActionRecord } from '../../worker/types';
 import { Toaster, toast } from 'sonner';
-import { Terminal, Shield } from 'lucide-react';
+import { Terminal, Shield, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 export function HomePage() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [actions, setActions] = useState<ActionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
   const sessionId = chatService.getSessionId();
   const refreshData = useCallback(async () => {
     try {
@@ -27,30 +29,51 @@ export function HomePage() {
       if (statsRes.success && statsRes.data) setStats(statsRes.data);
       if (filesRes.success && filesRes.data) setFiles(filesRes.data);
       if (actionsRes.success && actionsRes.data) setActions(actionsRes.data);
+      setError(null);
     } catch (err) {
       console.error("Dashboard refresh failed", err);
       toast.error("Process Sync Failure: Connection to core index lost.");
+      setError("Synchronicity Error: Remote Node unreachable.");
     } finally {
       setLoading(false);
     }
   }, [sessionId]);
   const initSession = useCallback(async () => {
     setLoading(true);
-    // Ping to ensure DO is ready
-    const isOnline = await chatService.ping();
-    if (!isOnline) {
-      console.warn("Node cold start detected. Waiting for neural link...");
+    try {
+      const isOnline = await chatService.ping();
+      if (!isOnline) {
+        console.warn("Node cold start detected. Synchronizing...");
+      }
+      await orbitalApi.createSession(`Mission ${sessionId.slice(0, 4)}`, sessionId);
+      await refreshData();
+    } catch (err) {
+      setError("Initialization sequence failed.");
+      setLoading(false);
     }
-    await orbitalApi.createSession(`Mission ${sessionId.slice(0, 4)}`, sessionId);
-    await refreshData();
   }, [sessionId, refreshData]);
   useEffect(() => {
     initSession();
   }, [initSession]);
-  const handleActionComplete = () => {
+  const handleActionComplete = useCallback(() => {
     setSelectedIds(new Set());
     refreshData();
-  };
+  }, [refreshData]);
+  const memoizedFiles = useMemo(() => files, [files]);
+  const memoizedActions = useMemo(() => actions, [actions]);
+  if (error) {
+    return (
+      <AppLayout container className="bg-slate-950 flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-4">
+          <Terminal className="w-12 h-12 text-rose-500 mx-auto opacity-50" />
+          <h2 className="text-rose-500 font-mono font-bold">{error}</h2>
+          <Button variant="outline" onClick={() => window.location.reload()} className="border-rose-900/30 text-rose-400">
+            <RefreshCw className="w-4 h-4 mr-2" /> REBOOT_SYSTEM
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
   return (
     <AppLayout container className="bg-slate-950 pb-32">
       <div className="flex flex-col min-h-screen gap-6">
@@ -60,18 +83,18 @@ export function HomePage() {
               <div className="w-3 h-8 bg-blue-600 rounded-sm" />
               ORBITAL // COMMAND
             </h1>
-            <p className="text-slate-500 font-mono text-xs uppercase tracking-widest">Autonomous Neural File Engine v4.0</p>
+            <p className="text-slate-500 font-mono text-xs uppercase tracking-widest">Neural File Engine v4.0</p>
           </div>
           <div className="flex items-center gap-4 bg-slate-900/30 p-3 rounded-xl border border-slate-800/50 backdrop-blur-md">
             <div className="flex flex-col pr-4 border-r border-slate-800">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Active_Node</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Node_ID</span>
               <span className="text-xs text-blue-400 font-mono truncate max-w-[120px]">{sessionId}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Access</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Status</span>
               <div className="flex items-center gap-2">
                 <Shield className="w-3 h-3 text-emerald-500" />
-                <span className="text-xs text-slate-300 font-mono uppercase tracking-tighter font-bold">Encrypted</span>
+                <span className="text-xs text-slate-300 font-mono uppercase tracking-tighter font-bold">Secure</span>
               </div>
             </div>
           </div>
@@ -79,7 +102,7 @@ export function HomePage() {
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center space-y-4 min-h-[400px]">
             <Terminal className="w-12 h-12 text-blue-500/20 animate-pulse" />
-            <div className="text-slate-600 animate-pulse font-mono text-sm tracking-widest uppercase font-bold">Synchronizing_Core_Index...</div>
+            <div className="text-slate-600 animate-pulse font-mono text-sm tracking-widest uppercase font-bold">Link_Sequence_Active...</div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col gap-6">
@@ -88,7 +111,7 @@ export function HomePage() {
                 <CommandConsole onCommandCompleted={refreshData} />
               </div>
               <div className="lg:col-span-3 h-full">
-                <ActionLog actions={actions} />
+                <ActionLog actions={memoizedActions} />
               </div>
               <div className="lg:col-span-4 h-full">
                 {stats && <SystemHealth stats={stats} />}
@@ -101,25 +124,25 @@ export function HomePage() {
                     <div className="w-1 h-4 bg-slate-800" />
                     Central_Binary_Index
                   </h2>
-                  <span className="text-[10px] text-slate-700 font-mono font-bold">{files.length} ENTRIES_LOADED</span>
+                  <span className="text-[10px] text-slate-700 font-mono font-bold">{memoizedFiles.length} OBJECTS_MAPPED</span>
                 </div>
-                <FileExplorer 
-                  files={files} 
-                  selectedIds={selectedIds} 
-                  onSelectionChange={setSelectedIds} 
+                <FileExplorer
+                  files={memoizedFiles}
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
                 />
               </div>
             </div>
           </div>
         )}
       </div>
-      <BatchToolbar 
-        selectedCount={selectedIds.size} 
-        selectedIds={Array.from(selectedIds)} 
+      <BatchToolbar
+        selectedCount={selectedIds.size}
+        selectedIds={Array.from(selectedIds)}
         onActionComplete={handleActionComplete}
         onClear={() => setSelectedIds(new Set())}
       />
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="bottom-right" richColors theme="dark" />
     </AppLayout>
   );
 }

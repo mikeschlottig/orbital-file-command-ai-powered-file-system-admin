@@ -39,13 +39,16 @@ export function BatchToolbar({ selectedCount, selectedIds, onActionComplete, onC
       setIsProcessing(false);
     }
   };
+  // Always render AnimatePresence to keep hooks stable, but conditionally render its children
   return (
-    <AnimatePresence>
-      {selectedCount > 0 && (
+    <AnimatePresence mode="wait">
+      {selectedCount > 0 ? (
         <motion.div
+          key="batch-toolbar"
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
+          transition={{ type: "spring", damping: 20, stiffness: 300 }}
           className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4"
         >
           <div className="bg-slate-900/90 border border-blue-500/30 backdrop-blur-xl rounded-2xl p-2 pr-4 shadow-[0_20px_50px_rgba(0,0,0,0.5),0_0_20px_rgba(59,130,246,0.2)] flex items-center gap-4">
@@ -59,7 +62,12 @@ export function BatchToolbar({ selectedCount, selectedIds, onActionComplete, onC
             <div className="flex-1 flex gap-2">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800 font-mono text-[10px] gap-2 uppercase tracking-tight">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    disabled={isProcessing}
+                    className="h-9 px-3 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800 font-mono text-[10px] gap-2 uppercase tracking-tight"
+                  >
                     <FolderInput className="w-3.5 h-3.5" /> Migrate
                   </Button>
                 </PopoverTrigger>
@@ -72,6 +80,7 @@ export function BatchToolbar({ selectedCount, selectedIds, onActionComplete, onC
                         className="bg-slate-900 border-slate-800 text-xs h-8"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAction('MOVE')}
                       />
                       <Button size="icon" className="h-8 w-8 bg-blue-600 hover:bg-blue-500" onClick={() => handleAction('MOVE')} disabled={isProcessing}>
                         {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
@@ -82,8 +91,13 @@ export function BatchToolbar({ selectedCount, selectedIds, onActionComplete, onC
               </Popover>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800 font-mono text-[10px] gap-2 uppercase tracking-tight">
-                    <Tag className="w-3.5 h-3.5" /> Attach_Tag
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    disabled={isProcessing}
+                    className="h-9 px-3 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800 font-mono text-[10px] gap-2 uppercase tracking-tight"
+                  >
+                    <Tag className="w-3.5 h-3.5" /> Tag
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 bg-slate-950 border-slate-800 p-3">
@@ -95,6 +109,7 @@ export function BatchToolbar({ selectedCount, selectedIds, onActionComplete, onC
                         className="bg-slate-900 border-slate-800 text-xs h-8"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAction('TAG')}
                       />
                       <Button size="icon" className="h-8 w-8 bg-emerald-600 hover:bg-emerald-500" onClick={() => handleAction('TAG')} disabled={isProcessing}>
                         {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
@@ -109,12 +124,13 @@ export function BatchToolbar({ selectedCount, selectedIds, onActionComplete, onC
               size="icon"
               className="h-8 w-8 text-slate-500 hover:text-rose-500 hover:bg-rose-500/5 transition-colors"
               onClick={onClear}
+              disabled={isProcessing}
             >
               <X className="w-4 h-4" />
             </Button>
           </div>
         </motion.div>
-      )}
+      ) : null}
     </AnimatePresence>
   );
 }
