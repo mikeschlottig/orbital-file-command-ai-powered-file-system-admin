@@ -2,7 +2,6 @@
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 import { cn } from "@/lib/utils"
-// Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 export type ChartConfig = {
   [k in string]: {
@@ -59,9 +58,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme || config.color
   )
-  if (!colorConfig.length) {
-    return null
-  }
+  if (!colorConfig.length) return null
   return (
     <style
       dangerouslySetInnerHTML={{
@@ -88,14 +85,7 @@ ${colorConfig
 const ChartTooltip = RechartsPrimitive.Tooltip
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-    React.ComponentProps<"div"> & {
-      hideLabel?: boolean
-      hideIndicator?: boolean
-      indicator?: "line" | "dot" | "dashed"
-      nameKey?: string
-      labelKey?: string
-    }
+  any
 >(
   (
     {
@@ -117,9 +107,7 @@ const ChartTooltipContent = React.forwardRef<
   ) => {
     const { config } = useChart()
     const tooltipLabel = React.useMemo(() => {
-      if (hideLabel || !payload?.length) {
-        return null
-      }
+      if (hideLabel || !payload?.length) return null
       const [item] = payload as any[]
       const key = `${labelKey || item?.dataKey || item?.name || "value"}`
       const itemConfig = getPayloadConfigFromPayload(config, item, key)
@@ -134,22 +122,10 @@ const ChartTooltipContent = React.forwardRef<
           </div>
         )
       }
-      if (!value) {
-        return null
-      }
+      if (!value) return null
       return <div className={cn("font-medium", labelClassName)}>{value}</div>
-    }, [
-      label,
-      labelFormatter,
-      payload,
-      hideLabel,
-      labelClassName,
-      config,
-      labelKey,
-    ])
-    if (!active || !payload?.length) {
-      return null
-    }
+    }, [label, labelFormatter, payload, hideLabel, labelClassName, config, labelKey])
+    if (!active || !payload?.length) return null
     const nestLabel = payload.length === 1 && indicator !== "dot"
     return (
       <div
@@ -233,21 +209,14 @@ ChartTooltipContent.displayName = "ChartTooltip"
 const ChartLegend = RechartsPrimitive.Legend
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> & {
-    payload?: any[]
-    verticalAlign?: "top" | "bottom" | "middle"
-    hideIcon?: boolean
-    nameKey?: string
-  }
+  any
 >(
   (
     { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },
     ref
   ) => {
     const { config } = useChart()
-    if (!payload?.length) {
-      return null
-    }
+    if (!payload?.length) return null
     return (
       <div
         ref={ref}
@@ -257,7 +226,7 @@ const ChartLegendContent = React.forwardRef<
           className
         )}
       >
-        {payload.map((item) => {
+        {payload.map((item: any) => {
           const key = `${nameKey || item.dataKey || "value"}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
           return (
@@ -286,15 +255,12 @@ const ChartLegendContent = React.forwardRef<
   }
 )
 ChartLegendContent.displayName = "ChartLegend"
-// Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
   config: ChartConfig,
   payload: unknown,
   key: string
 ) {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined
-  }
+  if (typeof payload !== "object" || payload === null) return undefined
   const payloadPayload =
     "payload" in payload &&
     typeof payload.payload === "object" &&
@@ -302,10 +268,7 @@ function getPayloadConfigFromPayload(
       ? payload.payload
       : undefined
   let configLabelKey: string = key
-  if (
-    key in payload &&
-    typeof (payload as any)[key] === "string"
-  ) {
+  if (key in payload && typeof (payload as any)[key] === "string") {
     configLabelKey = (payload as any)[key]
   } else if (
     payloadPayload &&
