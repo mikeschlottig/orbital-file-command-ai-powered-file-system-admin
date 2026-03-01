@@ -27,6 +27,24 @@ export const orbitalApi = {
       return { success: false, error: e.message || 'Network failure fetching audit trail.' };
     }
   },
+  async deleteFile(sessionId: string, fileId: string): Promise<ApiResponse<void>> {
+    try {
+      const res = await fetch(`/api/chat/${sessionId}/files/${fileId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+      return await res.json();
+    } catch (e: any) {
+      return { success: false, error: 'Failed to purge object from node.' };
+    }
+  },
+  async purgeAll(sessionId: string): Promise<ApiResponse<void>> {
+    try {
+      const res = await fetch(`/api/chat/${sessionId}/purge`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+      return await res.json();
+    } catch (e: any) {
+      return { success: false, error: 'Failed to wipe system core.' };
+    }
+  },
   async executeBatchAction(sessionId: string, batchData: BatchActionRequest): Promise<ApiResponse<{ batchId: string }>> {
     try {
       const res = await fetch(`/api/chat/${sessionId}/batch`, {
@@ -46,22 +64,14 @@ export const orbitalApi = {
       if (!res.ok) throw new Error(`HTTP_${res.status}`);
       return await res.json();
     } catch (e: any) {
-      return { success: false, error: e.message || 'Network failure listing active nodes.' };
+      return { success: false, error: 'Network failure listing active nodes.' };
     }
   },
   async fetchGlobalStats(): Promise<ApiResponse<GlobalStats>> {
     try {
       const res = await fetch('/api/sessions/stats');
       if (!res.ok) throw new Error(`HTTP_${res.status}`);
-      const data = await res.json();
-      return {
-        success: true,
-        data: {
-          totalSessions: data.data?.totalSessions || 0,
-          totalRecordsEstimate: (data.data?.totalSessions || 0) * 12,
-          systemLoad: Math.floor(Math.random() * 15) + 5
-        }
-      };
+      return await res.json();
     } catch (e: any) {
       return { success: false, error: 'Global telemetry unreachable.' };
     }

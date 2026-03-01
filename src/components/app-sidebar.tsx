@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Terminal, History, Trash2, ShieldAlert, Zap, Globe } from "lucide-react";
+import { Plus, Terminal, History, Trash2, ShieldAlert, Zap, Globe, Power } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +51,14 @@ export function AppSidebar(): JSX.Element {
       else loadData();
     }
   };
+  const handleSystemReboot = async () => {
+    if (!confirm("Initiate system-wide reboot? All records in current node will be wiped.")) return;
+    const res = await orbitalApi.purgeAll(currentSessionId);
+    if (res.success) {
+      toast.success("System reboot complete. Binary index cleared.");
+      window.location.reload();
+    }
+  };
   return (
     <Sidebar className="border-r border-slate-900 bg-slate-950">
       <SidebarHeader className="p-4">
@@ -94,11 +102,11 @@ export function AppSidebar(): JSX.Element {
                     <div className="flex items-center gap-2 truncate">
                       <div className={cn(
                         "w-1 h-1 rounded-full",
-                        currentSessionId === session.id ? "bg-blue-500" : "bg-slate-800"
+                        currentSessionId === session.id ? "bg-blue-500 shadow-[0_0_8px_#3b82f6]" : "bg-slate-800"
                       )} />
                       <span className="truncate font-bold">{session.title}</span>
                     </div>
-                    <span className="text-[8px] text-slate-700 ml-3">
+                    <span className="text-[8px] text-slate-700 ml-3 uppercase font-black">
                       L_ACT: {formatDistanceToNow(new Date(session.lastActive), { addSuffix: true })}
                     </span>
                   </div>
@@ -119,42 +127,61 @@ export function AppSidebar(): JSX.Element {
               <Globe className="w-3 h-3" /> Global_Telemetry
             </span>
           </div>
-          <div className="px-4 space-y-3">
-            <div className="space-y-1">
-              <div className="flex justify-between text-[9px] font-mono text-slate-500 uppercase">
+          <div className="px-4 space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[9px] font-mono text-slate-500 uppercase font-black">
                 <span>Active_Nodes</span>
-                <span className="text-blue-500 font-bold">{globalStats?.totalSessions || 0}</span>
+                <span className="text-blue-500">{globalStats?.totalSessions || 0}</span>
               </div>
-              <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
-                <div className="bg-blue-600 h-full w-[45%]" />
+              <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, (globalStats?.totalSessions || 0) * 10)}%` }}
+                  className="bg-blue-600 h-full" 
+                />
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-[9px] font-mono text-slate-500 uppercase">
-                <span>Index_Volume</span>
-                <span className="text-emerald-500 font-bold">{globalStats?.totalRecordsEstimate || 0} RECS</span>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[9px] font-mono text-slate-500 uppercase font-black">
+                <span>Object_Volume</span>
+                <span className="text-emerald-500">{globalStats?.totalRecordsEstimate || 0} RECS</span>
               </div>
-              <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
-                <div className="bg-emerald-600 h-full w-[30%]" />
+              <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, (globalStats?.totalRecordsEstimate || 0) / 10)}%` }}
+                  className="bg-emerald-600 h-full" 
+                />
               </div>
             </div>
             <div className="pt-2">
-              <div className="flex items-center gap-2 p-2 rounded bg-slate-900/50 border border-slate-900">
-                <Zap className="w-2.5 h-2.5 text-blue-500" />
-                <span className="text-[8px] font-mono text-slate-600 uppercase font-black">Sync_Rate: 14.2ms</span>
+              <div className="flex items-center justify-between p-2 rounded bg-slate-900/50 border border-slate-900">
+                <span className="text-[8px] font-mono text-slate-600 uppercase font-black">CPU_LOAD</span>
+                <span className={cn(
+                  "text-[9px] font-mono font-bold",
+                  (globalStats?.systemLoad || 0) > 80 ? "text-rose-500" : "text-blue-500"
+                )}>{globalStats?.systemLoad || 0}%</span>
               </div>
             </div>
           </div>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4 border-t border-slate-900 space-y-4">
-        <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
-          <div className="flex items-center gap-2 mb-1.5">
-            <ShieldAlert className="w-3.5 h-3.5 text-orange-500" />
-            <span className="text-[10px] font-black text-orange-500 uppercase tracking-tighter">System Alert</span>
+      <SidebarFooter className="p-4 border-t border-slate-900 space-y-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full border-rose-900/30 bg-rose-500/5 text-rose-500 hover:bg-rose-500 hover:text-white font-mono text-[9px] h-8 tracking-widest"
+          onClick={handleSystemReboot}
+        >
+          <Power className="w-3 h-3 mr-2" /> SYSTEM_REBOOT
+        </Button>
+        <div className="p-2.5 rounded-lg bg-orange-500/5 border border-orange-500/10">
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldAlert className="w-3 h-3 text-orange-500" />
+            <span className="text-[8px] font-black text-orange-500 uppercase tracking-tighter">System Alert</span>
           </div>
-          <p className="text-[9px] text-slate-500 leading-tight font-mono uppercase">
-            Cluster synchronization limits are active. Latency may increase during batch operations.
+          <p className="text-[8px] text-slate-600 leading-tight font-mono uppercase">
+            Neural sync operational. Latency &lt; 20ms.
           </p>
         </div>
       </SidebarFooter>

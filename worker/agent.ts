@@ -1,9 +1,10 @@
 import { Agent } from 'agents';
 import type { Env } from './core-utils';
-import type { ChatState, FileRecord, SystemStats, ActionRecord, BatchActionRequest } from './types';
+import type { ChatState, SystemStats, BatchActionRequest } from './types';
 import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
+import { getAppController } from './core-utils';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
@@ -20,6 +21,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
       this.state.model,
       this.ctx.storage.sql
     );
+    await this.reportStatsToController();
   }
   private initializeDB() {
     const sql = this.ctx.storage.sql;
@@ -75,18 +77,30 @@ export class ChatAgent extends Agent<Env, ChatState> {
     sql.exec(`INSERT INTO Tags (id, name) VALUES ('t1', 'Important'), ('t2', 'Work'), ('t3', 'Private')`);
     sql.exec(`INSERT INTO FileTags (file_id, tag_id) VALUES ('f1', 't1'), ('f1', 't2'), ('f2', 't2')`);
   }
+  private async reportStatsToController() {
+    const sql = this.ctx.storage.sql;
+    const stats = sql.exec(`SELECT count(*) as count, sum(size) as size FROM Files`).one() as any;
+    const controller = getAppController(this.env);
+    await controller.reportStats(this.ctx.id.toString(), stats.count || 0, stats.size || 0);
+  }
   async onRequest(request: Request): Promise<Response> {
     try {
       const url = new URL(request.url);
+      const path = url.pathname === "" ? "/" : url.pathname;
       const method = request.method;
-      if (method === 'GET' && url.pathname === '/ping') return Response.json({ success: true, status: 'online' });
-      if (method === 'GET' && url.pathname === '/files') return this.handleGetFiles();
-      if (method === 'GET' && url.pathname === '/stats') return this.handleGetStats();
-      if (method === 'GET' && url.pathname === '/actions') return this.handleGetActions();
-      if (method === 'GET' && url.pathname === '/messages') return this.handleGetMessages();
-      if (method === 'POST' && url.pathname === '/chat') return this.handleChatMessage(await request.json());
-      if (method === 'POST' && url.pathname === '/batch') return this.handleBatchAction(await request.json());
-      if (method === 'DELETE' && url.pathname === '/clear') return this.handleClearMessages();
+      if (method === 'GET' && path === '/ping') return Response.json({ success: true, status: 'online' });
+      if (method === 'GET' && path === '/files') return this.handleGetFiles();
+      if (method === 'GET' && path === '/stats') return this.handleGetStats();
+      if (method === 'GET' && path === '/actions') return this.handleGetActions();
+      if (method === 'GET' && path === '/messages') return this.handleGetMessages();
+      if (method === 'POST' && path === '/chat') return this.handleChatMessage(await request.json());
+      if (method === 'POST' && path === '/batch') return this.handleBatchAction(await request.json());
+      if (method === 'DELETE' && path === '/clear') return this.handleClearMessages();
+      if (method === 'DELETE' && path.startsWith('/files/')) {
+        const id = path.split('/').pop();
+        return this.handleDeleteFile(id || '');
+      }
+      if (method === 'DELETE' && path === '/purge') return this.handlePurgeDatabase();
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
     } catch (error) {
       console.error('Agent request handling error:', error);
@@ -127,13 +141,29 @@ export class ChatAgent extends Agent<Env, ChatState> {
     return Response.json({ success: true, data: stats });
   }
   private handleGetMessages(): Response {
-    // Ensure state has essential fields before returning
     const safeState = {
       ...this.state,
       messages: this.state.messages || [],
-      sessionId: this.state.sessionId || 'anonymous'
+      sessionId: this.ctx.id.toString()
     };
     return Response.json({ success: true, data: safeState });
+  }
+  private async handleDeleteFile(id: string): Promise<Response> {
+    const sql = this.ctx.storage.sql;
+    sql.exec(`DELETE FROM Files WHERE id = ?`, id);
+    sql.exec(`INSERT INTO Actions (id, type, description, status) VALUES (?, 'PURGE', ?, 'success')`,
+      crypto.randomUUID(), `Object ${id} purged from index.`);
+    await this.reportStatsToController();
+    return Response.json({ success: true });
+  }
+  private async handlePurgeDatabase(): Promise<Response> {
+    const sql = this.ctx.storage.sql;
+    sql.exec(`DELETE FROM Files`);
+    sql.exec(`DELETE FROM Actions`);
+    sql.exec(`INSERT INTO Actions (id, type, description, status) VALUES (?, 'SYSTEM', ?, 'success')`,
+      crypto.randomUUID(), `System core wiped and re-indexed.`);
+    await this.reportStatsToController();
+    return Response.json({ success: true });
   }
   private async handleBatchAction(body: BatchActionRequest): Promise<Response> {
     const { fileIds, action, value } = body;
@@ -154,6 +184,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
         sql.exec(`INSERT INTO Actions (id, type, description, status, batch_id) VALUES (?, 'TAG', ?, 'success', ?)`,
           crypto.randomUUID(), `Batch tagged ${fileIds.length} files with '${value}'`, batchId);
       }
+      await this.reportStatsToController();
       return Response.json({ success: true, batchId });
     } catch (e: any) {
       return Response.json({ success: false, error: e.message }, { status: 500 });
@@ -176,39 +207,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
     });
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
-      if (stream) {
-        const { readable, writable } = new TransformStream();
-        const writer = writable.getWriter();
-        const encoder = createEncoder();
-        (async () => {
-          try {
-            this.setState({ ...this.state, streamingMessage: '' });
-            const response = await this.chatHandler!.processMessage(
-              message,
-              this.state.messages,
-              (chunk: string) => {
-                this.setState({
-                  ...this.state,
-                  streamingMessage: (this.state.streamingMessage || '') + chunk
-                });
-                writer.write(encoder.encode(chunk));
-              }
-            );
-            const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
-            this.setState({
-              ...this.state,
-              messages: [...this.state.messages, assistantMessage],
-              isProcessing: false,
-              streamingMessage: ''
-            });
-          } catch (e) {
-            writer.write(encoder.encode('Neural link interrupted during stream.'));
-          } finally {
-            writer.close();
-          }
-        })();
-        return createStreamResponse(readable);
-      }
       const response = await this.chatHandler.processMessage(message, this.state.messages);
       const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
       this.setState({
@@ -216,6 +214,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
         messages: [...this.state.messages, assistantMessage],
         isProcessing: false
       });
+      await this.reportStatsToController();
       return Response.json({ success: true, data: this.state });
     } catch (error) {
       this.setState({ ...this.state, isProcessing: false });

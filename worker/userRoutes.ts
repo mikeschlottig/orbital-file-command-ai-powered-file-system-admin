@@ -9,8 +9,14 @@ export function coreRoutes(app: Hono<{ Bindings: Env }>) {
             const sessionId = c.req.param('sessionId');
             const agent = await getAgentByName<Env, ChatAgent>(c.env.CHAT_AGENT, sessionId);
             const url = new URL(c.req.url);
-            url.pathname = url.pathname.replace(`/api/chat/${sessionId}`, '');
-            return agent.fetch(new Request(url.toString(), {
+            // Robust prefix stripping
+            const prefix = `/api/chat/${sessionId}`;
+            const internalPath = url.pathname.startsWith(prefix) 
+                ? url.pathname.substring(prefix.length) || "/" 
+                : url.pathname;
+            const internalUrl = new URL(internalPath, url.origin);
+            internalUrl.search = url.search;
+            return agent.fetch(new Request(internalUrl.toString(), {
                 method: c.req.method,
                 headers: c.req.header(),
                 body: c.req.method === 'GET' || c.req.method === 'DELETE' ? undefined : c.req.raw.body
@@ -42,8 +48,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
             let sessionTitle = title;
             if (!sessionTitle) {
                 const now = new Date().toLocaleString();
-                sessionTitle = firstMessage ? 
-                    (firstMessage.slice(0, 30) + '...') : 
+                sessionTitle = firstMessage ?
+                    (firstMessage.slice(0, 30) + '...') :
                     `Mission ${now}`;
             }
             await registerSession(c.env, sessionId, sessionTitle);
@@ -64,8 +70,8 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     app.get('/api/sessions/stats', async (c) => {
         try {
             const controller = getAppController(c.env);
-            const count = await controller.getSessionCount();
-            return c.json({ success: true, data: { totalSessions: count } });
+            const stats = await controller.getGlobalStats();
+            return c.json({ success: true, data: stats });
         } catch (error) {
             return c.json({ success: false, error: 'Telemetry failure' }, 500);
         }
