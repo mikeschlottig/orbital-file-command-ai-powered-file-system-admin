@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
 import { SystemHealth } from '@/components/dashboard/SystemHealth';
 import { FileExplorer } from '@/components/dashboard/FileExplorer';
 import { CommandConsole } from '@/components/dashboard/CommandConsole';
@@ -7,7 +6,6 @@ import { ActionLog } from '@/components/dashboard/ActionLog';
 import { chatService } from '@/lib/chat';
 import { orbitalApi } from '@/lib/api';
 import { FileRecord, SystemStats, ActionRecord } from '../../worker/types';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Toaster, toast } from '@/components/ui/sonner';
 import { Info, Terminal } from 'lucide-react';
 export function HomePage() {
@@ -37,7 +35,7 @@ export function HomePage() {
     refreshData();
   }, [refreshData]);
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
+    <div className="min-h-screen bg-slate-950 text-slate-200 overflow-x-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="py-8 md:py-10 lg:py-12 flex flex-col min-h-screen gap-6">
           <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-900 pb-6">
@@ -63,20 +61,20 @@ export function HomePage() {
             </div>
           </header>
           {loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4 min-h-[400px]">
               <Terminal className="w-12 h-12 text-blue-500/20 animate-pulse" />
               <div className="text-slate-600 animate-pulse font-mono text-sm tracking-widest">INITIALIZING_CORE_MANIFEST...</div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col gap-6 min-h-0">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[450px]">
-                <div className="lg:col-span-5 h-full overflow-hidden">
+            <div className="flex-1 flex flex-col gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[450px]">
+                <div className="lg:col-span-5 h-full">
                   <CommandConsole onCommandCompleted={refreshData} />
                 </div>
-                <div className="lg:col-span-3 h-full overflow-hidden">
+                <div className="lg:col-span-3 h-full">
                   <ActionLog actions={actions} />
                 </div>
-                <div className="lg:col-span-4 h-full overflow-y-auto">
+                <div className="lg:col-span-4 h-full">
                   {stats && <SystemHealth stats={stats} />}
                 </div>
               </div>
@@ -107,7 +105,7 @@ export function HomePage() {
           </footer>
         </div>
       </div>
-      <Toaster theme="dark" position="bottom-right" closeButton />
+      <Toaster position="bottom-right" closeButton />
     </div>
   );
 }
